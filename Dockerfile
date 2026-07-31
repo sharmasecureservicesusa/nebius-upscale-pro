@@ -1,6 +1,7 @@
 FROM ghcr.io/ai-dock/comfyui:latest-cuda
 
-LABEL org.opencontainers.image.source="https://github.com/adminsharmasecureservicescausa/nebiusupscale"
+LABEL org.opencontainers.image.source = "https://github.com/sharmasecureservicesusa/nebius-upscale-pro"
+
 
 WORKDIR /app
 

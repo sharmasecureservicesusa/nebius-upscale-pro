@@ -1,0 +1,98 @@
+name: Build, Test, and Push Docker Image
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-test-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      # 1. Checkout repository
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 2. FREE DISK SPACE (Fixes "no space left on device")
+      - name: Free Disk Space on Runner
+        run: |
+          echo "=== Disk space before cleanup ==="
+          df -h
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/powershell
+          sudo rm -rf /usr/local/share/chromium
+          sudo rm -rf /usr/local/lib/node_modules
+          sudo apt-get clean
+          echo "=== Disk space after cleanup ==="
+          df -h
+
+      # 3. Set up Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 4. Log in to GitHub Container Registry
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 5. Extract Docker Metadata
+      - name: Extract Docker Metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest
+            type=sha,prefix=
+
+      # 6. Build Local Docker Image for Verification
+      - name: Build Docker Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: test-image:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # 7. Run Automated Sanity Checks
+      - name: Run Automated Container Sanity Tests
+        run: |
+          echo "=== Running Container Sanity Checks ==="
+          docker run --rm --entrypoint /bin/bash test-image:latest -c "python3 -c \"
+          import os, json
+          print('Checking repo files...')
+          assert os.path.exists('/app/workflow_api.json'), 'Missing workflow_api.json!'
+          assert os.path.exists('/app/run_usdu_batch.py'), 'Missing run_usdu_batch.py!'
+          assert os.path.exists('/app/entrypoint.sh'), 'Missing entrypoint.sh!'
+          
+          with open('/app/workflow_api.json') as f:
+              json.load(f)
+          print('All core script files and workflow_api.json syntax verified inside container!')
+          \""
+
+      # 8. Push Verified Image to GHCR
+      - name: Push Docker Image to GHCR
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

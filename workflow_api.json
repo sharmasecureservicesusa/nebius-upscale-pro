@@ -85,6 +85,8 @@
       "seam_fix_padding": 32,
       "force_uniform_tiles": true,
       "tiled_decode": true,
+      "batch_size": 1,
+      "upscale_model": ["5", 0],
       "image": ["7", 0],
       "model": ["1", 0],
       "positive": ["9", 0],

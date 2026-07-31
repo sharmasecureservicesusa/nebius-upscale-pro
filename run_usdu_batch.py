@@ -31,59 +31,44 @@ except ValueError:
 print(f"=== Target Resolution Multiplier: {upscale_factor}x ===")
 
 # -------------------------------------------------------------------
-# 2. ComfyUI Server & API Helpers
+# ComfyUI Server Setup
 # -------------------------------------------------------------------
+import glob
+
 def find_python_executable():
-    """Locates the Python binary that contains PyTorch and ComfyUI dependencies."""
+    """Locates the Python binary containing PyTorch & ComfyUI dependencies."""
     candidates = [
         "/opt/environments/python/comfyui/bin/python",
         "/opt/environments/python/comfyui/bin/python3",
         "/opt/micromamba/envs/comfyui/bin/python",
-        "/opt/micromamba/envs/comfyui/bin/python3",
-        "/workspace/environments/python/comfyui/bin/python",
         "/workspace/ComfyUI/venv/bin/python",
         "/opt/ComfyUI/venv/bin/python",
     ]
-    
-    # 1. Test known container paths for PyTorch
     for path in candidates:
         if os.path.exists(path):
             res = subprocess.run([path, "-c", "import torch"], capture_output=True)
             if res.returncode == 0:
-                print(f"✓ Found PyTorch in environment: {path}")
                 return path
-
-    # 2. Dynamic search if paths shift across image tags
-    print("Searching container directories for Python binary with PyTorch...")
     for pattern in ["/opt/**/bin/python*", "/workspace/**/bin/python*"]:
         for path in glob.glob(pattern, recursive=True):
             if os.path.isfile(path) and os.access(path, os.X_OK) and not path.endswith("-config"):
                 res = subprocess.run([path, "-c", "import torch"], capture_output=True)
                 if res.returncode == 0:
-                    print(f"✓ Dynamically discovered PyTorch binary: {path}")
                     return path
-
-    print("⚠️ Warning: Could not locate PyTorch environment. Falling back to sys.executable.")
     return sys.executable
 
 def find_comfyui_dir():
-    """Locates the main ComfyUI installation directory."""
-    candidates = [
-        os.getenv("COMFYUI_DIR", ""),
-        "/workspace/ComfyUI",
-        "/opt/ComfyUI",
-        "/app/ComfyUI"
-    ]
+    candidates = [os.getenv("COMFYUI_DIR", ""), "/workspace/ComfyUI", "/opt/ComfyUI", "/app/ComfyUI"]
     for path in candidates:
         if path and os.path.exists(os.path.join(path, "main.py")):
             return path
     return "/workspace/ComfyUI"
 
 def ensure_comfyui_running():
-    """Checks if ComfyUI server is active; launches background instance with live logging if needed."""
+    """Launches ComfyUI background instance and streams logs safely to a file."""
     try:
         urllib.request.urlopen(f"http://{SERVER_ADDRESS}/system_stats", timeout=2)
-        print("✓ ComfyUI server is active and listening on port 8188.")
+        print("✓ ComfyUI server is already active.")
         return None
     except Exception:
         print("Launching local ComfyUI server instance...")

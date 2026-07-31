@@ -2,18 +2,16 @@ import os
 import sys
 import json
 import time
-import glob
-import subprocess
 import uuid
 import shutil
 import subprocess
 import urllib.request
 import urllib.parse
+import urllib.error
 
 # -------------------------------------------------------------------
 # Global Configuration & Paths
 # -------------------------------------------------------------------
-# Automatically locate ComfyUI base path inside the container
 COMFYUI_DIR = os.getenv("COMFYUI_DIR", "/opt/ComfyUI")
 if not os.path.exists(COMFYUI_DIR) and os.path.exists("/workspace/ComfyUI"):
     COMFYUI_DIR = "/workspace/ComfyUI"
@@ -22,10 +20,8 @@ SERVER_ADDRESS = "127.0.0.1:8188"
 INPUT_DIR = "/mnt/s3bucket/input"
 OUTPUT_DIR = "/mnt/s3bucket/output"
 WORKFLOW_FILE = "/app/workflow_api.json"
+COMFY_LOG_FILE = "/tmp/comfyui.log"
 
-# -------------------------------------------------------------------
-# 1. Parse Dynamic Resolution Multiplier
-# -------------------------------------------------------------------
 try:
     upscale_factor = float(os.getenv("UPSCALE_FACTOR", "3.0"))
 except ValueError:

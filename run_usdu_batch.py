@@ -76,14 +76,9 @@ def ensure_comfyui_running():
         comfy_dir = find_comfyui_dir()
         main_py = os.path.join(comfy_dir, "main.py")
         
-        print(f"-> Using Python binary: {python_bin}")
-        print(f"-> Using ComfyUI main.py: {main_py}")
+        # Open a file for logs to prevent buffer deadlocks
+        log_handle = open(COMFY_LOG_FILE, "w")
         
-        if not os.path.exists(main_py):
-            print(f"❌ Error: main.py not found at {main_py}")
-            sys.exit(1)
-
-        # Launch background server process and capture output
         proc = subprocess.Popen(
             [
                 python_bin, main_py,
@@ -91,39 +86,31 @@ def ensure_comfyui_running():
                 "--port", "8188",
                 "--disable-auto-launch"
             ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1
+            stdout=log_handle,
+            stderr=subprocess.STDOUT
         )
 
-        # Poll until server responds, printing logs if process dies prematurely
         for _ in range(60):
             if proc.poll() is not None:
-                print(f"❌ ComfyUI process exited prematurely with code: {proc.returncode}")
-                print("--- ComfyUI Startup Logs ---")
-                out, _ = proc.communicate()
-                print(out)
-                print("----------------------------")
+                print(f"❌ ComfyUI process exited prematurely. Checking logs at {COMFY_LOG_FILE}")
+                os.system(f"cat {COMFY_LOG_FILE}")
                 sys.exit(1)
-
             try:
                 urllib.request.urlopen(f"http://{SERVER_ADDRESS}/system_stats", timeout=2)
                 print("✓ ComfyUI server initialized successfully!")
                 return proc
             except Exception:
                 time.sleep(2)
-
-        print("❌ Error: ComfyUI server failed to start within 120s timeout.")
-        if proc.poll() is None:
-            proc.terminate()
-            out, _ = proc.communicate()
-            print("--- ComfyUI Startup Logs ---")
-            print(out)
+        
+        print("❌ Error: ComfyUI server failed to start within timeout.")
+        os.system(f"cat {COMFY_LOG_FILE}")
         sys.exit(1)
 
+# -------------------------------------------------------------------
+# ComfyUI API Handlers
+# -------------------------------------------------------------------
 def queue_prompt(prompt_workflow):
-    """Sends prompt payload to ComfyUI API endpoint with detailed error catching."""
+    """Sends prompt payload to ComfyUI API endpoint."""
     client_id = str(uuid.uuid4())
     payload = json.dumps({"prompt": prompt_workflow, "client_id": client_id}).encode("utf-8")
     req = urllib.request.Request(

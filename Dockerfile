@@ -1,5 +1,6 @@
 FROM ghcr.io/ai-dock/comfyui:latest-cuda
 
+# Link container package directly to GitHub Repository
 LABEL org.opencontainers.image.source="https://github.com/adminsharmasecureservicescausa/nebiusupscale"
 
 WORKDIR /app
@@ -14,17 +15,18 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Custom Nodes safely via tarball extraction
-RUN mkdir -p /opt/ComfyUI/custom_nodes/ComfyUI_Ultimate_SD_Upscale && \
-    wget -qO- https://github.com/ssitu/ComfyUI_Ultimate_SD_Upscale/archive/refs/heads/master.tar.gz | \
-    tar -xzf - --strip-components=1 -C /opt/ComfyUI/custom_nodes/ComfyUI_Ultimate_SD_Upscale
+# Fix Git ownership check and clone Ultimate SD Upscale node
+RUN git config --global --add safe.directory '*' && \
+    mkdir -p /opt/ComfyUI/custom_nodes && \
+    rm -rf /opt/ComfyUI/custom_nodes/ComfyUI_UltimateSDUpscale && \
+    git clone --depth 1 https://github.com/ssitu/ComfyUI_UltimateSDUpscale /opt/ComfyUI/custom_nodes/ComfyUI_UltimateSDUpscale
 
 # Create model directories
 RUN mkdir -p /opt/ComfyUI/models/checkpoints \
              /opt/ComfyUI/models/upscale_models \
              /opt/ComfyUI/models/controlnet
-             
-# Pre-download required models during image build (prevents GPU runtime delays)
+
+# Pre-download required models during image build
 # 1. SDXL Base Checkpoint
 RUN wget -q -O /opt/ComfyUI/models/checkpoints/sd_xl_base_1.0.safetensors \
     https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors

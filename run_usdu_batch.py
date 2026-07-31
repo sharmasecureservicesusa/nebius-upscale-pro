@@ -138,101 +138,95 @@ def wait_for_completion(prompt_id):
                     return history[prompt_id]
         except Exception:
             pass
+
+        # 2. Check if job disappeared from the queue (Silent crash)
+        try:
+            with urllib.request.urlopen(f"http://{SERVER_ADDRESS}/queue") as resp:
+                queue = json.loads(resp.read().decode("utf-8"))
+                in_queue = any(q[1] == prompt_id for q in queue.get("queue_running", []) + queue.get("queue_pending", []))
+                
+                if not in_queue:
+                    time.sleep(2) # Grace period for transit from queue to history
+                    with urllib.request.urlopen(f"http://{SERVER_ADDRESS}/history/{prompt_id}") as hist_resp:
+                        hist = json.loads(hist_resp.read().decode("utf-8"))
+                        if prompt_id not in hist:
+                            print(f"\n❌ ERROR: Image generation dropped silently inside ComfyUI.")
+                            print("--- Last 50 lines of ComfyUI execution logs ---")
+                            os.system(f"tail -n 50 {COMFY_LOG_FILE}")
+                            print("-----------------------------------------------")
+                            raise RuntimeError("ComfyUI execution failed.")
+                        else:
+                            return hist[prompt_id]
+        except Exception as e:
+            if isinstance(e, RuntimeError):
+                raise e
+            
         time.sleep(2)
 
 # -------------------------------------------------------------------
-# 3. Main Batch Runner
+# Main Batch Runner
 # -------------------------------------------------------------------
 def main():
     os.makedirs(INPUT_DIR, exist_ok=True)
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    # Fetch pending images from S3 input folder
-    image_files = [
-        f for f in os.listdir(INPUT_DIR)
-        if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp'))
-    ]
-
+    image_files = [f for f in os.listdir(INPUT_DIR) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp'))]
     if not image_files:
         print(f"No images found in {INPUT_DIR}. Nothing to process.")
         sys.exit(0)
 
-    print(f"Found {len(image_files)} image(s) in input queue.")
-
-    # 1. Start Server
     server_proc = ensure_comfyui_running()
-
-    # 2. Load API Workflow Structure
-    if not os.path.exists(WORKFLOW_FILE):
-        print(f"❌ Error: Workflow file not found at {WORKFLOW_FILE}")
-        sys.exit(1)
 
     with open(WORKFLOW_FILE, "r") as f:
         base_workflow = json.load(f)
 
-    # 3. Identify Node References
     load_image_node = None
     usdu_node = None
 
     for node_id, node_data in base_workflow.items():
-        class_type = node_data.get("class_type", "")
-        if class_type == "LoadImage":
+        if node_data.get("class_type") == "LoadImage":
             load_image_node = node_id
-        elif class_type == "UltimateSDUpscale":
+        elif node_data.get("class_type") == "UltimateSDUpscale":
             usdu_node = node_id
 
-    # Apply global upscale factor to workflow
     if usdu_node:
         base_workflow[usdu_node]["inputs"]["upscale_by"] = upscale_factor
-        print(f"✓ Configured UltimateSDUpscale (Node {usdu_node}) to {upscale_factor}x resolution.")
 
     comfy_input_dir = os.path.join(COMFYUI_DIR, "input")
     os.makedirs(comfy_input_dir, exist_ok=True)
 
-    # 4. Batch Execution Loop
     for idx, img_name in enumerate(image_files, 1):
         print(f"\n[{idx}/{len(image_files)}] Processing image: {img_name}")
         src_input_path = os.path.join(INPUT_DIR, img_name)
         target_output_path = os.path.join(OUTPUT_DIR, f"upscaled_{img_name}")
 
         try:
-            # Copy source image into ComfyUI local input directory
             comfy_temp_input = os.path.join(comfy_input_dir, img_name)
             shutil.copy(src_input_path, comfy_temp_input)
 
-            # Build workflow copy for current image execution
             current_workflow = json.loads(json.dumps(base_workflow))
             if load_image_node:
                 current_workflow[load_image_node]["inputs"]["image"] = img_name
 
-            # Queue prompt & await completion
             prompt_id = queue_prompt(current_workflow)
-            print(f"Queued Job ID: {prompt_id}. Upscaling in progress...")
+            print(f"Queued Job ID: {prompt_id}. Generating...")
+            
             history = wait_for_completion(prompt_id)
-
-            # Retrieve path to generated image output
             outputs = history.get("outputs", {})
             generated_full_path = None
 
             for node_id, output_data in outputs.items():
                 if "images" in output_data and len(output_data["images"]) > 0:
                     img_info = output_data["images"][0]
-                    generated_filename = img_info["filename"]
-                    subfolder = img_info.get("subfolder", "")
-                    comfy_out_dir = os.path.join(COMFYUI_DIR, "output", subfolder)
-                    generated_full_path = os.path.join(comfy_out_dir, generated_filename)
+                    generated_full_path = os.path.join(COMFYUI_DIR, "output", img_info.get("subfolder", ""), img_info["filename"])
                     break
 
-            # Verify and move generated image to S3 bucket
             if generated_full_path and os.path.exists(generated_full_path):
                 shutil.move(generated_full_path, target_output_path)
                 print(f"✓ Saved result to S3 storage: {target_output_path}")
 
-                # Clean temporary local input copy
                 if os.path.exists(comfy_temp_input):
                     os.remove(comfy_temp_input)
-
-                # Delete original source file from S3 input folder after confirmation
                 if os.path.exists(target_output_path):
                     os.remove(src_input_path)
                     print(f"🗑️ Cleaned original image from S3 input: {src_input_path}")

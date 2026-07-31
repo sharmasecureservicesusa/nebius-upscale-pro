@@ -236,7 +236,6 @@ def main():
         except Exception as e:
             print(f"❌ Error processing {img_name}: {str(e)}")
 
-    # Clean up background process if managed by this script
     if server_proc:
         print("Terminating background ComfyUI instance...")
         server_proc.terminate()

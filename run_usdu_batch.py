@@ -123,18 +123,14 @@ def queue_prompt(prompt_workflow):
             res_data = json.loads(response.read().decode("utf-8"))
             return res_data["prompt_id"]
     except urllib.error.HTTPError as e:
-        error_body = e.read().decode("utf-8")
         print(f"\n❌ ComfyUI Prompt Validation Failed (HTTP 400):")
-        try:
-            parsed_err = json.loads(error_body)
-            print(json.dumps(parsed_err, indent=2))
-        except Exception:
-            print(error_body)
+        print(e.read().decode("utf-8"))
         raise e
 
 def wait_for_completion(prompt_id):
-    """Polls history endpoint until processing finishes."""
+    """Polls history and queue to ensure job completes and doesn't freeze."""
     while True:
+        # 1. Check if job finished successfully
         try:
             with urllib.request.urlopen(f"http://{SERVER_ADDRESS}/history/{prompt_id}") as resp:
                 history = json.loads(resp.read().decode("utf-8"))

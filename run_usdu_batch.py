@@ -1,5 +1,6 @@
 import os
 import sys
+import glob
 import json
 import time
 import uuid
@@ -9,9 +10,6 @@ import urllib.request
 import urllib.parse
 import urllib.error
 
-# -------------------------------------------------------------------
-# Global Configuration & Paths
-# -------------------------------------------------------------------
 COMFYUI_DIR = os.getenv("COMFYUI_DIR", "/opt/ComfyUI")
 if not os.path.exists(COMFYUI_DIR) and os.path.exists("/workspace/ComfyUI"):
     COMFYUI_DIR = "/workspace/ComfyUI"
@@ -62,28 +60,26 @@ def find_comfyui_dir():
     for path in candidates:
         if path and os.path.exists(os.path.join(path, "main.py")):
             return path
-    return "/workspace/ComfyUI"
+    return "/opt/ComfyUI"
 
 def ensure_comfyui_running():
-    """Launches ComfyUI background instance and streams logs safely to a file."""
     try:
         urllib.request.urlopen(f"http://{SERVER_ADDRESS}/system_stats", timeout=2)
-        print("✓ ComfyUI server is already active.")
+        print("✓ ComfyUI server is active.")
         return None
     except Exception:
-        print("Launching local ComfyUI server instance...")
+        print("Launching local ComfyUI server instance with --highvram...")
         python_bin = find_python_executable()
         comfy_dir = find_comfyui_dir()
         main_py = os.path.join(comfy_dir, "main.py")
         
-        # Open a file for logs to prevent buffer deadlocks
         log_handle = open(COMFY_LOG_FILE, "w")
-        
         proc = subprocess.Popen(
             [
                 python_bin, main_py,
                 "--listen", "127.0.0.1",
                 "--port", "8188",
+                "--highvram",
                 "--disable-auto-launch"
             ],
             stdout=log_handle,
@@ -101,16 +97,9 @@ def ensure_comfyui_running():
                 return proc
             except Exception:
                 time.sleep(2)
-        
-        print("❌ Error: ComfyUI server failed to start within timeout.")
-        os.system(f"cat {COMFY_LOG_FILE}")
         sys.exit(1)
 
-# -------------------------------------------------------------------
-# ComfyUI API Handlers
-# -------------------------------------------------------------------
 def queue_prompt(prompt_workflow):
-    """Sends prompt payload to ComfyUI API endpoint."""
     client_id = str(uuid.uuid4())
     payload = json.dumps({"prompt": prompt_workflow, "client_id": client_id}).encode("utf-8")
     req = urllib.request.Request(
@@ -209,8 +198,6 @@ def main():
                 current_workflow[load_image_node]["inputs"]["image"] = img_name
 
             prompt_id = queue_prompt(current_workflow)
-            print(f"Queued Job ID: {prompt_id}. Generating...")
-            
             history = wait_for_completion(prompt_id)
             outputs = history.get("outputs", {})
             generated_full_path = None
@@ -223,21 +210,20 @@ def main():
 
             if generated_full_path and os.path.exists(generated_full_path):
                 shutil.move(generated_full_path, target_output_path)
-                print(f"✓ Saved result to S3 storage: {target_output_path}")
+                print(f"✓ Saved result: {target_output_path}")
 
                 if os.path.exists(comfy_temp_input):
                     os.remove(comfy_temp_input)
                 if os.path.exists(target_output_path):
                     os.remove(src_input_path)
-                    print(f"🗑️ Cleaned original image from S3 input: {src_input_path}")
             else:
-                print(f"⚠️ Output verification failed for {img_name}. Retaining input file.")
+                print(f"⚠️ Output verification failed for {img_name}.")
 
         except Exception as e:
             print(f"❌ Error processing {img_name}: {str(e)}")
 
     if server_proc:
-        print("Terminating background ComfyUI instance...")
+        print("Terminating ComfyUI background instance...")
         server_proc.terminate()
 
     print("\n=== All batch jobs processed successfully ===")

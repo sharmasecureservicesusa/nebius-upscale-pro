@@ -59,7 +59,7 @@ def ensure_comfyui_running():
         print("✓ ComfyUI server is active.")
         return None
     except Exception:
-        print("Launching local ComfyUI server instance with --highvram...")
+        print("Launching local ComfyUI instance (--gpu-only, --fp16-vae, SDPA)...")
         python_bin = find_python_executable()
         comfy_dir = find_comfyui_dir()
         main_py = os.path.join(comfy_dir, "main.py")
@@ -70,7 +70,9 @@ def ensure_comfyui_running():
                 python_bin, main_py,
                 "--listen", "127.0.0.1",
                 "--port", "8188",
-                "--highvram",
+                "--gpu-only",
+                "--fp16-vae",
+                "--use-pytorch-cross-attention",
                 "--disable-auto-launch"
             ],
             stdout=log_handle,

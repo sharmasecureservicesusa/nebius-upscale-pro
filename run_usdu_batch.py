@@ -116,13 +116,26 @@ def wait_for_completion(prompt_id):
         time.sleep(0.3)
 
 def main():
+    print(f"Checking input directory: {INPUT_DIR}", flush=True)
     os.makedirs(INPUT_DIR, exist_ok=True)
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    image_files = [f for f in os.listdir(INPUT_DIR) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp'))]
+    SUPPORTED_EXTENSIONS = (
+    '.png', '.jpg', '.jpeg', '.webp', 
+    '.bmp', '.tiff', '.tif', '.tga', 
+    '.pnm', '.ppm', '.pgm', '.heic', 
+    '.heif'
+    )
+
+    image_files = [
+    f for f in os.listdir(INPUT_DIR) 
+    if f.lower().endswith(SUPPORTED_EXTENSIONS)
+    ]
     if not image_files:
-        print(f"No images found in {INPUT_DIR}. Exiting.")
+        print(f"No images found in {INPUT_DIR}. Please place files in s3://<bucket>/input/", flush=True)
         sys.exit(0)
+
+    print(f"✓ Found {len(image_files)} image(s) to upscale.", flush=True)
 
     server_proc = ensure_comfyui_running()
 

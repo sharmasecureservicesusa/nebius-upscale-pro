@@ -4,6 +4,7 @@ LABEL org.opencontainers.image.source="https://github.com/adminsharmasecureservi
 
 WORKDIR /app
 
+ENV PYTHONUNBUFFERED=1
 ENV PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True,garbage_collection_threshold:0.8"
 ENV PIPX_HOME=/opt/pipx
 ENV PIPX_BIN_DIR=/usr/local/bin
@@ -19,7 +20,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pipx install uvicorn && \
-    pipx inject uvicorn fastapi python-multipart
+    pipx inject uvicorn fastapi python-multipart pillow-heif
 
 RUN git config --global --add safe.directory '*' && \
     mkdir -p /opt/ComfyUI/custom_nodes && \

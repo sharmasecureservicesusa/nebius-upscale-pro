@@ -30,6 +30,7 @@ RUN mkdir -p /opt/ComfyUI/models/checkpoints \
 COPY . /app
 
 # Convert line endings and set permissions
-RUN dos2unix /app/entrypoint.sh && chmod +x /app/entrypoint.sh
+RUN dos2unix /app/entrypoint.sh /app/download_models.sh && \
+    chmod +x /app/entrypoint.sh /app/download_models.sh
 
 ENTRYPOINT ["/app/entrypoint.sh"]

@@ -38,11 +38,11 @@ if [ ! -f "$LORA_PATH" ]; then
     wget -c -L -O "$LORA_PATH" "https://huggingface.co/ByteDance/SDXL-Lightning/resolve/main/sdxl_lightning_8step_lora.safetensors"
 fi
 
-# 3. RealESRGAN x4plus
-UPSCALE_PATH="/opt/ComfyUI/models/upscale_models/RealESRGAN_x4plus.pth"
+# 3. 4x-UltraSharp Model
+UPSCALE_PATH="/opt/ComfyUI/models/upscale_models/4x-UltraSharp.pth"
 if [ ! -f "$UPSCALE_PATH" ]; then
-    echo "Downloading RealESRGAN x4plus model..."
-    wget -c -L -O "$UPSCALE_PATH" "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth"
+    echo "Downloading 4x-UltraSharp model..."
+    wget -c -L -O "$UPSCALE_PATH" "https://huggingface.co/lokidvb/4x-UltraSharp/resolve/main/4x-UltraSharp.pth"
 fi
 
 # 4. ControlNet Tile SDXL

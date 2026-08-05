@@ -37,7 +37,7 @@
   },
   "5": {
     "inputs": {
-      "model_name": "RealESRGAN_x4plus.pth"
+      "model_name": "4x-UltraSharp.pth"
     },
     "class_type": "UpscaleModelLoader"
   },

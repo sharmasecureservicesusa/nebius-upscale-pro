@@ -4,6 +4,7 @@ LABEL org.opencontainers.image.source="https://github.com/adminsharmasecureservi
 
 WORKDIR /app
 
+ENV PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True,garbage_collection_threshold:0.8"
 ENV PIPX_HOME=/opt/pipx
 ENV PIPX_BIN_DIR=/usr/local/bin
 

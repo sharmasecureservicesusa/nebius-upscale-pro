@@ -13,29 +13,39 @@ if [ -n "$S3_ACCESS_KEY" ] && [ -n "$S3_SECRET_KEY" ]; then
         -o url=https://storage.eu-north1.nebius.cloud \
         -o use_path_request_style \
         -o allow_other
-    
     echo "✓ Storage mounted successfully."
-else
-    echo "⚠️ Warning: S3 credentials missing. Proceeding without mounting Object Storage..."
 fi
+
+echo "=== Creating Required Directory Paths ==="
+mkdir -p /opt/ComfyUI/models/checkpoints \
+         /opt/ComfyUI/models/upscale_models \
+         /opt/ComfyUI/models/controlnet \
+         /opt/ComfyUI/models/loras
 
 echo "=== Checking Required Model Files ==="
 
-# 1. SDXL Base Checkpoint (6.9 GB)
+# 1. SDXL Base Checkpoint
 CHECKPOINT_PATH="/opt/ComfyUI/models/checkpoints/sd_xl_base_1.0.safetensors"
 if [ ! -f "$CHECKPOINT_PATH" ]; then
     echo "Downloading SDXL Base model..."
     wget -c -L -O "$CHECKPOINT_PATH" "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors"
 fi
 
-# 2. RealESRGAN x4plus (Official Xinntao Release URL)
+# 2. SDXL Lightning 8-Step LoRA
+LORA_PATH="/opt/ComfyUI/models/loras/sdxl_lightning_8step_lora.safetensors"
+if [ ! -f "$LORA_PATH" ]; then
+    echo "Downloading SDXL Lightning 8-step LoRA..."
+    wget -c -L -O "$LORA_PATH" "https://huggingface.co/ByteDance/SDXL-Lightning/resolve/main/sdxl_lightning_8step_lora.safetensors"
+fi
+
+# 3. RealESRGAN x4plus
 UPSCALE_PATH="/opt/ComfyUI/models/upscale_models/RealESRGAN_x4plus.pth"
 if [ ! -f "$UPSCALE_PATH" ]; then
     echo "Downloading RealESRGAN x4plus model..."
     wget -c -L -O "$UPSCALE_PATH" "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth"
 fi
 
-# 3. ControlNet Tile SDXL
+# 4. ControlNet Tile SDXL
 CONTROLNET_PATH="/opt/ComfyUI/models/controlnet/controlnet-tile-sdxl.safetensors"
 if [ ! -f "$CONTROLNET_PATH" ]; then
     echo "Downloading ControlNet Tile SDXL model..."

@@ -107,19 +107,12 @@ def queue_prompt(prompt_workflow):
         data=payload,
         headers={"Content-Type": "application/json"}
     )
-    try:
-        with urllib.request.urlopen(req) as response:
-            res_data = json.loads(response.read().decode("utf-8"))
-            return res_data["prompt_id"]
-    except urllib.error.HTTPError as e:
-        print(f"\n❌ ComfyUI Prompt Validation Failed (HTTP 400):")
-        print(e.read().decode("utf-8"))
-        raise e
+    with urllib.request.urlopen(req) as response:
+        res_data = json.loads(response.read().decode("utf-8"))
+        return res_data["prompt_id"]
 
 def wait_for_completion(prompt_id):
-    """Polls history and queue to ensure job completes and doesn't freeze."""
     while True:
-        # 1. Check if job finished successfully
         try:
             with urllib.request.urlopen(f"http://{SERVER_ADDRESS}/history/{prompt_id}") as resp:
                 history = json.loads(resp.read().decode("utf-8"))
@@ -127,41 +120,15 @@ def wait_for_completion(prompt_id):
                     return history[prompt_id]
         except Exception:
             pass
+        time.sleep(0.5)
 
-        # 2. Check if job disappeared from the queue (Silent crash)
-        try:
-            with urllib.request.urlopen(f"http://{SERVER_ADDRESS}/queue") as resp:
-                queue = json.loads(resp.read().decode("utf-8"))
-                in_queue = any(q[1] == prompt_id for q in queue.get("queue_running", []) + queue.get("queue_pending", []))
-                
-                if not in_queue:
-                    time.sleep(2) # Grace period for transit from queue to history
-                    with urllib.request.urlopen(f"http://{SERVER_ADDRESS}/history/{prompt_id}") as hist_resp:
-                        hist = json.loads(hist_resp.read().decode("utf-8"))
-                        if prompt_id not in hist:
-                            print(f"\n❌ ERROR: Image generation dropped silently inside ComfyUI.")
-                            print("--- Last 50 lines of ComfyUI execution logs ---")
-                            os.system(f"tail -n 50 {COMFY_LOG_FILE}")
-                            print("-----------------------------------------------")
-                            raise RuntimeError("ComfyUI execution failed.")
-                        else:
-                            return hist[prompt_id]
-        except Exception as e:
-            if isinstance(e, RuntimeError):
-                raise e
-            
-        time.sleep(2)
-
-# -------------------------------------------------------------------
-# Main Batch Runner
-# -------------------------------------------------------------------
 def main():
     os.makedirs(INPUT_DIR, exist_ok=True)
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     image_files = [f for f in os.listdir(INPUT_DIR) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp'))]
     if not image_files:
-        print(f"No images found in {INPUT_DIR}. Nothing to process.")
+        print(f"No images found in {INPUT_DIR}. Exiting.")
         sys.exit(0)
 
     server_proc = ensure_comfyui_running()

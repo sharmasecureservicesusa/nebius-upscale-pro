@@ -54,5 +54,10 @@ fi
 
 echo "✓ All required models verified."
 
-echo "=== Starting Upscale Batch Job ==="
-exec python3 /app/run_usdu_batch.py
+if [ "$MODE" = "endpoint" ]; then
+    echo "=== Starting High-Speed Endpoint Service (Port 8000) ==="
+    exec uvicorn server:app --host 0.0.0.0 --port 8000
+else
+    echo "=== Starting High-Speed Upscale Batch Job ==="
+    exec python3 /app/run_usdu_batch.py
+fi

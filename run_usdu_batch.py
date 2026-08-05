@@ -21,20 +21,11 @@ WORKFLOW_FILE = "/app/workflow_api.json"
 COMFY_LOG_FILE = "/tmp/comfyui.log"
 
 try:
-    upscale_factor = float(os.getenv("UPSCALE_FACTOR", "3.0"))
+    upscale_factor = float(os.getenv("UPSCALE_FACTOR", "2.0"))
 except ValueError:
-    print("⚠️ Invalid UPSCALE_FACTOR provided. Defaulting to 3.0x")
-    upscale_factor = 3.0
-
-print(f"=== Target Resolution Multiplier: {upscale_factor}x ===")
-
-# -------------------------------------------------------------------
-# ComfyUI Server Setup
-# -------------------------------------------------------------------
-import glob
+    upscale_factor = 2.0
 
 def find_python_executable():
-    """Locates the Python binary containing PyTorch & ComfyUI dependencies."""
     candidates = [
         "/opt/environments/python/comfyui/bin/python",
         "/opt/environments/python/comfyui/bin/python3",
@@ -88,7 +79,7 @@ def ensure_comfyui_running():
 
         for _ in range(60):
             if proc.poll() is not None:
-                print(f"❌ ComfyUI process exited prematurely. Checking logs at {COMFY_LOG_FILE}")
+                print(f"❌ ComfyUI process exited prematurely.")
                 os.system(f"cat {COMFY_LOG_FILE}")
                 sys.exit(1)
             try:

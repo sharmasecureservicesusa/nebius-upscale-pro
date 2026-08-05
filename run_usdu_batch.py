@@ -81,7 +81,7 @@ def ensure_comfyui_running():
 
         for _ in range(60):
             if proc.poll() is not None:
-                print(f"❌ ComfyUI process exited prematurely.")
+                print("❌ ComfyUI process exited prematurely.")
                 os.system(f"cat {COMFY_LOG_FILE}")
                 sys.exit(1)
             try:

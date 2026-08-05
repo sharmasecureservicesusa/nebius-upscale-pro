@@ -113,7 +113,7 @@ def wait_for_completion(prompt_id):
                     return history[prompt_id]
         except Exception:
             pass
-        time.sleep(0.5)
+        time.sleep(0.3)
 
 def main():
     os.makedirs(INPUT_DIR, exist_ok=True)

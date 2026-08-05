@@ -103,7 +103,7 @@ def wait_for_completion(prompt_id):
                     return history[prompt_id]
         except Exception:
             pass
-        time.sleep(0.5)
+        time.sleep(0.3)
 
 @app.on_event("startup")
 def startup_event():

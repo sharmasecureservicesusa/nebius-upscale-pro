@@ -1,6 +1,12 @@
 #!/bin/bash
 set -e
 
+# Performance Optimizations for NVIDIA L40S (Ada Lovelace)
+export PYTORCH_CUDA_ALLOC_CONF="garbage_collection_threshold:0.8,max_split_size_mb:512"
+export CUDA_MODULE_LOADING="LAZY"
+export OMP_NUM_THREADS=16
+export MKL_NUM_THREADS=16
+
 echo "=== Mounting Nebius Object Storage ==="
 mkdir -p /mnt/s3bucket
 

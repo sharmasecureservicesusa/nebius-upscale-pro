@@ -16,7 +16,7 @@ SERVER_ADDRESS = "127.0.0.1:8188"
 WORKFLOW_FILE = "/app/workflow_api.json"
 COMFY_LOG_FILE = "/tmp/comfyui.log"
 
-app = FastAPI(title="ComfyUI Fast SDXL Upscaler Endpoint")
+app = FastAPI(title="ComfyUI L40S Optimized Upscaler Endpoint")
 comfy_process = None
 
 def find_python_executable():

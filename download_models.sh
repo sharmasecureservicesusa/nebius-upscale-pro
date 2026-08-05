@@ -22,10 +22,10 @@ if [ ! -f "$LORA_DIR/sdxl_lightning_8step_lora.safetensors" ]; then
          -o "$LORA_DIR/sdxl_lightning_8step_lora.safetensors"
 fi
 
-# 3. Download 4x-UltraSharp Model
+# 3. Download 4x-UltraSharp Model (Public Repository Fix)
 if [ ! -f "$UPSCALE_DIR/4x-UltraSharp.pth" ]; then
     echo "Downloading 4x-UltraSharp Model..."
-    curl -fL -C - "https://huggingface.co/lokidvb/4x-UltraSharp/resolve/main/4x-UltraSharp.pth" \
+    curl -fL -C - "https://huggingface.co/lokCX/4x-Ultrasharp/resolve/main/4x-UltraSharp.pth" \
          -o "$UPSCALE_DIR/4x-UltraSharp.pth"
 fi
 
@@ -38,4 +38,6 @@ fi
 
 echo "✓ All required models verified successfully!"
 
-exec "$@"
+if [ $# -gt 0 ]; then
+    exec "$@"
+fi

@@ -7,7 +7,15 @@ export CUDA_MODULE_LOADING="LAZY"
 export OMP_NUM_THREADS=16
 export MKL_NUM_THREADS=16
 
-git clone --depth 1 https://github.com/ssitu/ComfyUI_UltimateSDUpscale /opt/ComfyUI/custom_nodes/ComfyUI_UltimateSDUpscale
+echo "=== Ensuring Required Custom Nodes ==="
+mkdir -p /opt/ComfyUI/custom_nodes
+
+if [ ! -d "/opt/ComfyUI/custom_nodes/ComfyUI_UltimateSDUpscale" ]; then
+    echo "Cloning ComfyUI_UltimateSDUpscale repository..."
+    git clone --depth 1 https://github.com/ssitu/ComfyUI_UltimateSDUpscale /opt/ComfyUI/custom_nodes/ComfyUI_UltimateSDUpscale
+else
+    echo "✓ ComfyUI_UltimateSDUpscale node already present."
+fi
 
 echo "=== Running Model Verification ==="
 /app/download_models.sh

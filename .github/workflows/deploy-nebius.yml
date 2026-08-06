@@ -3,8 +3,7 @@ name: Deploy Upscale Job to Nebius AI Cloud
 on:
   push:
     branches:
-      - main
-      - master
+      - prod_deploy
   workflow_dispatch:
 
 env:

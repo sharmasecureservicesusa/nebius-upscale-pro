@@ -39,7 +39,7 @@ jobs:
 
       - name: Install Nebius CLI
         run: |
-          curl -sSL https://storage.eu-north1.nebius.cloud/nebius-cli/install.sh | bash
+          curl -sSL https://storage.eu-north1.nebius.cloud/cli/install.sh | bash
           echo "$HOME/.nebius/bin" >> $GITHUB_PATH
 
       - name: Authenticate Nebius Service Account

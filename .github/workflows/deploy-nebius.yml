@@ -1,0 +1,88 @@
+name: Deploy Upscale Job to Nebius AI Cloud
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker Metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest
+            type=sha,format=short
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Install Nebius CLI
+        run: |
+          curl -sSL https://storage.eu-north1.nebius.cloud/nebius-cli/install.sh | bash
+          echo "$HOME/.nebius/bin" >> $GITHUB_PATH
+
+      - name: Authenticate Nebius Service Account
+        run: |
+          mkdir -p ~/.nebius
+          echo '${{ secrets.NEBIUS_SA_KEY }}' > ~/.nebius/sa-credentials.json
+          nebius profile create \
+            --endpoint api.nebius.cloud \
+            --service-account-file ~/.nebius/sa-credentials.json \
+            --profile sa-profile
+          nebius config set profile sa-profile
+
+      - name: Deploy Batch Job to Nebius AI Cloud
+        run: |
+          JOB_NAME="sdxl-upscale-$(date +%s)"
+          
+          nebius ai job create \
+            --name "$JOB_NAME" \
+            --parent-id "${{ secrets.NEBIUS_PROJECT_ID }}" \
+            --image "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" \
+            --container-command "/app/entrypoint.sh" \
+            --env MODE=batch \
+            --env UPSCALE_FACTOR=4.0 \
+            --env S3_BUCKET_NAME="${{ secrets.S3_BUCKET_NAME }}" \
+            --env S3_ACCESS_KEY="${{ secrets.S3_ACCESS_KEY }}" \
+            --env S3_SECRET_KEY="${{ secrets.S3_SECRET_KEY }}" \
+            --env S3_ENDPOINT_URL="https://storage.eu-north1.nebius.cloud" \
+            --platform gpu-l40s-a \
+            --preset 1gpu-32vcpu-128gb \
+            --disk-size 200Gi \
+            --subnet-id "${{ secrets.NEBIUS_SUBNET_ID }}" \
+            --preemptible \
+            --timeout 8h

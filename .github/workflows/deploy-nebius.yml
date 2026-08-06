@@ -1,4 +1,4 @@
-name: Deploy Upscale Job to Nebius AI Cloud
+name: Deploy Single GPU AI Upscale Job
 
 on:
   push:

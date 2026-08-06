@@ -1,4 +1,4 @@
-name: Deploy Upscale Job to Nebius AI Cloud
+name: Deploy Mutli GPU Job to Nebius
 
 on:
   push:

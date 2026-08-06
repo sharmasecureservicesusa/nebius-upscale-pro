@@ -14,6 +14,31 @@ from concurrent.futures import ThreadPoolExecutor
 
 sys.stdout.reconfigure(line_buffering=True)
 
+# Self-healing check: Re-exec with ComfyUI virtual environment if torch is missing
+try:
+    import torch
+except ImportError:
+    python_candidates = [
+        "/opt/environments/python/comfyui/bin/python",
+        "/opt/micromamba/envs/comfyui/bin/python",
+        "/workspace/ComfyUI/venv/bin/python",
+        "/opt/ComfyUI/venv/bin/python",
+    ]
+    target_python = None
+    for candidate in python_candidates:
+        if os.path.exists(candidate):
+            res = subprocess.run([candidate, "-c", "import torch"], capture_output=True)
+            if res.returncode == 0:
+                target_python = candidate
+                break
+
+    if target_python:
+        print(f"[INFO] Switching Python environment to: {target_python}", flush=True)
+        os.execv(target_python, [target_python] + sys.argv)
+    else:
+        print("[ERROR] PyTorch (torch) could not be found in any Python environment.", flush=True)
+        sys.exit(1)
+
 print("=== Starting Auto-Scaling Multi-GPU Batch Pipeline ===", flush=True)
 
 # Ensure boto3 is available
@@ -23,8 +48,6 @@ except ImportError:
     print("Installing boto3 for S3 API transfers...", flush=True)
     subprocess.run([sys.executable, "-m", "pip", "install", "boto3"], check=True)
     import boto3
-
-import torch
 
 # Configuration & Environment Variables
 S3_BUCKET = os.getenv("S3_BUCKET_NAME", "ai-upscale-bucket")
@@ -47,7 +70,6 @@ SUPPORTED_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.webp', '.bmp', '.tiff', '.tif
 GPU_COUNT = torch.cuda.device_count()
 VRAM_GB = (torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)) if GPU_COUNT > 0 else 0
 
-# Auto-calculate optimal defaults based on VRAM per GPU if ENV overrides are not set
 DEFAULT_WORKERS_PER_GPU = 2 if VRAM_GB >= 35 else 1
 DEFAULT_BATCH_SIZE = 2 if VRAM_GB >= 35 else 1
 DEFAULT_TILE_SIZE = 1024

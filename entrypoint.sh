@@ -7,6 +7,21 @@ export CUDA_MODULE_LOADING="LAZY"
 export OMP_NUM_THREADS=16
 export MKL_NUM_THREADS=16
 
+# Locate the correct Python binary containing PyTorch and ComfyUI dependencies
+PYTHON_BIN="python3"
+for candidate in \
+    "/opt/environments/python/comfyui/bin/python" \
+    "/opt/micromamba/envs/comfyui/bin/python" \
+    "/workspace/ComfyUI/venv/bin/python" \
+    "/opt/ComfyUI/venv/bin/python"; do
+    if [ -f "$candidate" ]; then
+        PYTHON_BIN="$candidate"
+        break
+    fi
+done
+
+echo "[INFO] Using Python interpreter: $PYTHON_BIN"
+
 echo "=== Ensuring Required Custom Nodes ==="
 mkdir -p /opt/ComfyUI/custom_nodes
 
@@ -22,8 +37,8 @@ echo "=== Running Model Verification ==="
 
 if [ "$MODE" = "endpoint" ]; then
     echo "=== Starting Endpoint Service ==="
-    exec uvicorn server:app --host 0.0.0.0 --port 8000
+    exec "$PYTHON_BIN" -m uvicorn server:app --host 0.0.0.0 --port 8000
 else
     echo "=== Launching Batch Upscale Pipeline ==="
-    exec python3 /app/run_usdu_batch.py
+    exec "$PYTHON_BIN" /app/run_usdu_batch.py
 fi

@@ -1,3 +1,15 @@
+name: Deploy Upscale Job to Nebius AI Cloud
+
+on:
+  push:
+    branches:
+      - prod_deploy
+  workflow_dispatch: # Enables manual triggering from UI & GitHub CLI
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
 jobs:
   deploy-only:
     runs-on: ubuntu-latest

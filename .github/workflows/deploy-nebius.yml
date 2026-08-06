@@ -28,7 +28,6 @@ jobs:
             --endpoint api.nebius.cloud \
             --service-account-file ~/.nebius/sa-credentials.json \
             --profile sa-profile
-          nebius config set profile sa-profile
 
       - name: Deploy Batch Job to Nebius AI Cloud
         run: |

@@ -152,8 +152,13 @@ def queue_prompt(server_address, prompt_workflow):
         data=payload, 
         headers={"Content-Type": "application/json"}
     )
-    with urllib.request.urlopen(req) as response:
-        return json.loads(response.read().decode("utf-8"))["prompt_id"]
+    try:
+        with urllib.request.urlopen(req) as response:
+            return json.loads(response.read().decode("utf-8"))["prompt_id"]
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8")
+        print(f"[ComfyUI Validation Error]: {error_body}", flush=True)
+        raise RuntimeError(f"Prompt validation failed: {error_body}")
 
 
 def wait_for_completion(server_address, prompt_id):
@@ -162,7 +167,12 @@ def wait_for_completion(server_address, prompt_id):
             with urllib.request.urlopen(f"http://{server_address}/history/{prompt_id}") as resp:
                 history = json.loads(resp.read().decode("utf-8"))
                 if prompt_id in history:
-                    return history[prompt_id]
+                    prompt_info = history[prompt_id]
+                    status = prompt_info.get("status", {})
+                    if status.get("status_str") == "error":
+                        messages = status.get("messages", [])
+                        print(f"[ComfyUI Execution Error]: {messages}", flush=True)
+                    return prompt_info
         except Exception:
             pass
         time.sleep(0.3)
@@ -210,7 +220,6 @@ def worker_thread(worker_id, gpu_id, server_address, job_queue, base_workflow, l
 
                 print(f"[Worker {worker_id} | GPU {gpu_id}] Successfully upscaled: {img_name}", flush=True)
 
-                # Cleanup temp local files immediately
                 if os.path.exists(comfy_temp_input):
                     os.remove(comfy_temp_input)
                 if os.path.exists(generated_full_path):
@@ -290,7 +299,7 @@ def main():
     for node_id, node_data in base_workflow.items():
         if node_data.get("class_type") == "LoadImage":
             load_image_node = node_id
-        elif node_data.get("class_type") == "UltimateSDUpscale":
+        elif node_data.get("class_type") in ("UltimateSDUpscale", "UltimateSDUpscaleNoUpscale"):
             usdu_node = node_id
 
     if usdu_node:
@@ -300,6 +309,9 @@ def main():
         usdu_inputs["tile_height"] = TILE_SIZE
         usdu_inputs["batch_size"] = TILE_BATCH_SIZE
         usdu_inputs["force_uniform_tiles"] = True
+        usdu_inputs.setdefault("mode_type", "Linear")
+        usdu_inputs.setdefault("mask_blur", 8)
+        usdu_inputs.setdefault("tile_padding", 32)
         usdu_inputs.setdefault("seam_fix_mode", "None")
         usdu_inputs.setdefault("seam_fix_width", 64)
         usdu_inputs.setdefault("seam_fix_denoise", 0.35)
@@ -314,7 +326,7 @@ def main():
     for idx, img_name in enumerate(image_files, 1):
         job_queue.put((idx, img_name, len(image_files)))
 
-    # Launch worker pool matching total calculated workers
+    # Launch worker pool
     with ThreadPoolExecutor(max_workers=total_workers) as executor:
         futures = []
         for worker_id, gpu_id, server_addr in worker_configs:

@@ -1,0 +1,57 @@
+name: Deploy Upscale Job to Nebius AI Cloud
+
+on:
+  push:
+    branches:
+      - prod_deploy
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
+      - '.gitignore'
+      - '.github/workflows/*'
+  workflow_dispatch: # Enables manual triggering from UI & GitHub CLI
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  deploy-only:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install Nebius CLI
+        run: |
+          curl -sSL https://storage.eu-north1.nebius.cloud/cli/install.sh | bash
+          echo "$HOME/.nebius/bin" >> $GITHUB_PATH
+
+      - name: Authenticate Nebius Service Account
+        run: |
+          mkdir -p ~/.nebius
+          echo '${{ secrets.NEBIUS_SA_KEY }}' > ~/.nebius/sa-credentials.json
+          nebius profile create \
+            --endpoint api.nebius.cloud \
+            --service-account-file ~/.nebius/sa-credentials.json \
+            --profile sa-profile
+
+      - name: Deploy Batch Job to Nebius AI Cloud
+        run: |
+          JOB_NAME="sdxl-upscale-$(date +%s)"
+          
+          nebius ai job create \
+            --name "sdxl-upscale-dual-gpu-$(date +%s)" \
+            --parent-id "${NEBIUS_PROJECT_ID}" \
+            --image "${REGISTRY}/${IMAGE_NAME}:latest" \
+            --container-command "/app/entrypoint.sh" \
+            --env MODE=batch \
+            --env UPSCALE_FACTOR=4.0 \
+            --env S3_BUCKET_NAME="${S3_BUCKET_NAME}" \
+            --env S3_ACCESS_KEY="${S3_ACCESS_KEY}" \
+            --env S3_SECRET_KEY="${S3_SECRET_KEY}" \
+            --env S3_ENDPOINT_URL="https://storage.eu-north1.nebius.cloud" \
+            --platform gpu-l40s-a \
+            --preset 2gpu-64vcpu-256gb \
+            --disk-size 200Gi \
+            --subnet-id "${NEBIUS_SUBNET_ID}" \
+            --preemptible \
+            --timeout 8h

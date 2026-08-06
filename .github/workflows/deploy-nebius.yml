@@ -12,7 +12,7 @@ env:
 
 jobs:
   build-and-deploy:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-01kz7ns2bcmcb7ae7wtxbrzwpp-4vcpu
     permissions:
       contents: read
       packages: write
@@ -36,18 +36,6 @@ jobs:
           tags: |
             type=raw,value=latest
             type=sha,format=short
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and Push Docker Image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
       - name: Install Nebius CLI
         run: |

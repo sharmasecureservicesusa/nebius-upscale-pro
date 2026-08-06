@@ -11,32 +11,10 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build-and-deploy:
+  deploy-only:
     runs-on: blacksmith-01kz7ns2bcmcb7ae7wtxbrzwpp-4vcpu
-    permissions:
-      contents: read
-      packages: write
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract Docker Metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=latest
-            type=sha,format=short
-
       - name: Install Nebius CLI
         run: |
           curl -sSL https://storage.eu-north1.nebius.cloud/cli/install.sh | bash

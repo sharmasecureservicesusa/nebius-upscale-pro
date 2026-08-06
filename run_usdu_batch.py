@@ -182,7 +182,22 @@ def main():
             usdu_node = node_id
 
     if usdu_node:
-        base_workflow[usdu_node]["inputs"]["upscale_by"] = upscale_factor
+        usdu_inputs = base_workflow[usdu_node]["inputs"]
+        
+        # Set requested upscale factor
+        usdu_inputs["upscale_by"] = upscale_factor
+        
+        # Inject required seam fix parameters
+        usdu_inputs.setdefault("seam_fix_mode", "None")
+        usdu_inputs.setdefault("seam_fix_width", 64)
+        usdu_inputs.setdefault("seam_fix_denoise", 0.35)
+        usdu_inputs.setdefault("seam_fix_padding", 32)
+        usdu_inputs.setdefault("seam_fix_mask_blur", 8)
+
+        # Inject extra tile / decode defaults required by newer versions of the node
+        usdu_inputs.setdefault("force_uniform_tiles", True)
+        usdu_inputs.setdefault("tiled_decode", False)
+        usdu_inputs.setdefault("batch_size", 1)
 
     comfy_dir = find_comfyui_dir()
     comfy_input_dir = os.path.join(comfy_dir, "input")

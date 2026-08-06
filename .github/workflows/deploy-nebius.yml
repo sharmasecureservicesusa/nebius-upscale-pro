@@ -12,7 +12,10 @@ env:
 
 jobs:
   deploy-only:
-    runs-on: blacksmith-01kz7ns2bcmcb7ae7wtxbrzwpp-4vcpu
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - name: Install Nebius CLI

@@ -54,4 +54,4 @@ jobs:
             --disk-size 250Gi \
             --subnet-id "${{ secrets.NEBIUS_SUBNET_ID }}" \
             --preemptible \
-            --timeout 8h
+            --timeout 4h

@@ -4,6 +4,11 @@ on:
   push:
     branches:
       - prod_deploy
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
+      - '.gitignore'
+      - '.github/workflows/*'
   workflow_dispatch: # Enables manual triggering from UI & GitHub CLI
 
 env:

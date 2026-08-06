@@ -5,10 +5,10 @@ import json
 import time
 import uuid
 import shutil
+import re
 import subprocess
 import urllib.request
 import urllib.error
-import re
 
 # Force unbuffered real-time logging for Nebius AI Cloud Jobs
 sys.stdout.reconfigure(line_buffering=True)
@@ -117,8 +117,8 @@ def queue_prompt(prompt_workflow):
         with urllib.request.urlopen(req) as response:
             return json.loads(response.read().decode("utf-8"))["prompt_id"]
     except urllib.error.HTTPError as e:
-        error_response = e.read().decode("utf-8")
-        print(f"❌ ComfyUI API Error (400): {error_response}", flush=True)
+        error_resp = e.read().decode("utf-8")
+        print(f"❌ ComfyUI API Error (400): {error_resp}", flush=True)
         raise e
 
 def wait_for_completion(prompt_id):
@@ -189,8 +189,13 @@ def main():
     os.makedirs(comfy_input_dir, exist_ok=True)
 
     for idx, img_name in enumerate(image_files, 1):
-    print(f"\n[{idx}/{len(image_files)}] Processing image: {img_name}", flush=True)
-    local_src_path = os.path.join(LOCAL_INPUT_DIR, img_name)
+        print(f"\n[{idx}/{len(image_files)}] Processing image: {img_name}", flush=True)
+        local_src_path = os.path.join(LOCAL_INPUT_DIR, img_name)
+        
+        # Sanitize filename (removes spaces/special chars that break ComfyUI)
+        safe_img_name = re.sub(r'[^a-zA-Z0-9_.-]', '_', img_name)
+        comfy_temp_input = os.path.join(comfy_input_dir, safe_img_name)
+
         try:
             shutil.copy(local_src_path, comfy_temp_input)
 
@@ -210,21 +215,21 @@ def main():
                     break
 
             if generated_full_path and os.path.exists(generated_full_path):
-                s3_target_key = f"output/upscaled_{img_name}"
+                s3_target_key = f"output/upscaled_{safe_img_name}"
                 if s3_client:
                     print(f"  -> Uploading result to S3: s3://{S3_BUCKET}/{s3_target_key}", flush=True)
                     s3_client.upload_file(generated_full_path, S3_BUCKET, s3_target_key)
-                    # Remove original file from input/ in S3
+                    # Delete processed source from S3 input folder
                     s3_client.delete_object(Bucket=S3_BUCKET, Key=f"input/{img_name}")
 
-                print(f"✓ Successfully processed and uploaded: {img_name}", flush=True)
+                print(f"✓ Successfully upscaled: {img_name}", flush=True)
 
                 if os.path.exists(comfy_temp_input):
                     os.remove(comfy_temp_input)
                 if os.path.exists(generated_full_path):
                     os.remove(generated_full_path)
             else:
-                print(f"⚠️ Output verification failed for {img_name}.", flush=True)
+                print(f"⚠️ Output file missing for {img_name}.", flush=True)
 
         except Exception as e:
             print(f"❌ Error processing {img_name}: {str(e)}", flush=True)
@@ -232,7 +237,7 @@ def main():
     if server_proc:
         server_proc.terminate()
 
-    print("\n=== All batch jobs processed successfully ===", flush=True)
+    print("\n=== All batch jobs completed successfully ===", flush=True)
 
 if __name__ == "__main__":
     main()

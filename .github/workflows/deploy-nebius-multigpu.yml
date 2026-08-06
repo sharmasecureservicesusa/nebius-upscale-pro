@@ -49,9 +49,9 @@ jobs:
             --env S3_ACCESS_KEY="${{ secrets.S3_ACCESS_KEY }}" \
             --env S3_SECRET_KEY="${{ secrets.S3_SECRET_KEY }}" \
             --env S3_ENDPOINT_URL="https://storage.eu-north1.nebius.cloud" \
-            --platform gpu-l40s-a \
-            --preset 2gpu-64vcpu-256gb \
-            --disk-size 200Gi \
+            --platform gpu-l40s-d \
+            --preset 2gpu-64vcpu-384gb \
+            --disk-size 250Gi \
             --subnet-id "${{ secrets.NEBIUS_SUBNET_ID }}" \
             --preemptible \
             --timeout 8h

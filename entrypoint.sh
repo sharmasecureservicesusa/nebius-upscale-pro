@@ -7,6 +7,8 @@ export CUDA_MODULE_LOADING="LAZY"
 export OMP_NUM_THREADS=16
 export MKL_NUM_THREADS=16
 
+git clone --depth 1 https://github.com/ssitu/ComfyUI_UltimateSDUpscale /opt/ComfyUI/custom_nodes/ComfyUI_UltimateSDUpscale
+
 echo "=== Running Model Verification ==="
 /app/download_models.sh
 

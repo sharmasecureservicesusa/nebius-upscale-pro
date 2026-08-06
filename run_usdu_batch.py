@@ -7,6 +7,8 @@ import uuid
 import shutil
 import subprocess
 import urllib.request
+import urllib.error
+import re
 
 # Force unbuffered real-time logging for Nebius AI Cloud Jobs
 sys.stdout.reconfigure(line_buffering=True)
@@ -106,9 +108,18 @@ def ensure_comfyui_running():
 def queue_prompt(prompt_workflow):
     client_id = str(uuid.uuid4())
     payload = json.dumps({"prompt": prompt_workflow, "client_id": client_id}).encode("utf-8")
-    req = urllib.request.Request(f"http://{SERVER_ADDRESS}/prompt", data=payload, headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req) as response:
-        return json.loads(response.read().decode("utf-8"))["prompt_id"]
+    req = urllib.request.Request(
+        f"http://{SERVER_ADDRESS}/prompt", 
+        data=payload, 
+        headers={"Content-Type": "application/json"}
+    )
+    try:
+        with urllib.request.urlopen(req) as response:
+            return json.loads(response.read().decode("utf-8"))["prompt_id"]
+    except urllib.error.HTTPError as e:
+        error_response = e.read().decode("utf-8")
+        print(f"❌ ComfyUI API Error (400): {error_response}", flush=True)
+        raise e
 
 def wait_for_completion(prompt_id):
     while True:
@@ -178,16 +189,14 @@ def main():
     os.makedirs(comfy_input_dir, exist_ok=True)
 
     for idx, img_name in enumerate(image_files, 1):
-        print(f"\n[{idx}/{len(image_files)}] Processing image: {img_name}", flush=True)
-        local_src_path = os.path.join(LOCAL_INPUT_DIR, img_name)
-        comfy_temp_input = os.path.join(comfy_input_dir, img_name)
-
+    print(f"\n[{idx}/{len(image_files)}] Processing image: {img_name}", flush=True)
+    local_src_path = os.path.join(LOCAL_INPUT_DIR, img_name)
         try:
             shutil.copy(local_src_path, comfy_temp_input)
 
             current_workflow = json.loads(json.dumps(base_workflow))
             if load_image_node:
-                current_workflow[load_image_node]["inputs"]["image"] = img_name
+                current_workflow[load_image_node]["inputs"]["image"] = safe_img_name
 
             prompt_id = queue_prompt(current_workflow)
             history = wait_for_completion(prompt_id)

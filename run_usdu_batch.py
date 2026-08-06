@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 sys.stdout.reconfigure(line_buffering=True)
 
-print("=== Starting Dual-GPU Upscaling Batch Pipeline ===", flush=True)
+print("=== Starting Auto-Scaling Multi-GPU Batch Pipeline ===", flush=True)
 
 # Ensure boto3 is available
 try:
@@ -26,7 +26,7 @@ except ImportError:
 
 import torch
 
-# Configuration
+# Configuration & Environment Variables
 S3_BUCKET = os.getenv("S3_BUCKET_NAME", "ai-upscale-bucket")
 S3_ACCESS_KEY = os.getenv("S3_ACCESS_KEY")
 S3_SECRET_KEY = os.getenv("S3_SECRET_KEY")
@@ -43,6 +43,20 @@ except ValueError:
 
 SUPPORTED_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.webp', '.bmp', '.tiff', '.tif', '.tga')
 
+# Hardware Auto-Detection & Dynamic Scaling Setup
+GPU_COUNT = torch.cuda.device_count()
+VRAM_GB = (torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)) if GPU_COUNT > 0 else 0
+
+# Auto-calculate optimal defaults based on VRAM per GPU if ENV overrides are not set
+DEFAULT_WORKERS_PER_GPU = 2 if VRAM_GB >= 35 else 1
+DEFAULT_BATCH_SIZE = 2 if VRAM_GB >= 35 else 1
+DEFAULT_TILE_SIZE = 1024
+
+WORKERS_PER_GPU = int(os.getenv("WORKERS_PER_GPU", str(DEFAULT_WORKERS_PER_GPU)))
+TILE_BATCH_SIZE = int(os.getenv("TILE_BATCH_SIZE", str(DEFAULT_BATCH_SIZE)))
+TILE_SIZE = int(os.getenv("TILE_SIZE", str(DEFAULT_TILE_SIZE)))
+
+
 def find_python_executable():
     candidates = [
         "/opt/environments/python/comfyui/bin/python",
@@ -55,6 +69,7 @@ def find_python_executable():
             return path
     return sys.executable
 
+
 def find_comfyui_dir():
     candidates = [os.getenv("COMFYUI_DIR", ""), "/workspace/ComfyUI", "/opt/ComfyUI", "/app/ComfyUI"]
     for path in candidates:
@@ -62,18 +77,20 @@ def find_comfyui_dir():
             return path
     return "/opt/ComfyUI"
 
-def start_comfyui_server(gpu_id, port):
-    """Starts a ComfyUI instance pinned to a specific GPU and Port."""
+
+def start_comfyui_server(worker_id, gpu_id, port):
+    """Starts a ComfyUI instance assigned to a specific GPU and Port."""
     server_address = f"127.0.0.1:{port}"
-    print(f"Launching ComfyUI instance on GPU {gpu_id} (Port {port})...", flush=True)
+    print(f"Launching Worker {worker_id} on GPU {gpu_id} (Port {port})...", flush=True)
     
     python_bin = find_python_executable()
     comfy_dir = find_comfyui_dir()
     main_py = os.path.join(comfy_dir, "main.py")
-    log_file = f"/tmp/comfyui_gpu_{gpu_id}.log"
+    log_file = f"/tmp/comfyui_worker_{worker_id}.log"
     
     env = os.environ.copy()
-    env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+    if GPU_COUNT > 0:
+        env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
 
     log_handle = open(log_file, "w")
     proc = subprocess.Popen(
@@ -81,7 +98,7 @@ def start_comfyui_server(gpu_id, port):
             python_bin, main_py,
             "--listen", "127.0.0.1",
             "--port", str(port),
-            "--gpu-only",
+            "--gpu-only" if GPU_COUNT > 0 else "--cpu",
             "--fp16-vae",
             "--use-pytorch-cross-attention",
             "--disable-auto-launch"
@@ -93,16 +110,17 @@ def start_comfyui_server(gpu_id, port):
 
     for _ in range(60):
         if proc.poll() is not None:
-            print(f"[ERROR] ComfyUI on GPU {gpu_id} exited prematurely.", flush=True)
+            print(f"[ERROR] Worker {worker_id} on GPU {gpu_id} exited prematurely.", flush=True)
             os.system(f"cat {log_file}")
             sys.exit(1)
         try:
             urllib.request.urlopen(f"http://{server_address}/system_stats", timeout=2)
-            print(f"[INFO] ComfyUI active on GPU {gpu_id} (Port {port}).", flush=True)
+            print(f"[INFO] Worker {worker_id} active on GPU {gpu_id} (Port {port}).", flush=True)
             return proc, server_address
         except Exception:
             time.sleep(2)
     sys.exit(1)
+
 
 def queue_prompt(server_address, prompt_workflow):
     client_id = str(uuid.uuid4())
@@ -115,6 +133,7 @@ def queue_prompt(server_address, prompt_workflow):
     with urllib.request.urlopen(req) as response:
         return json.loads(response.read().decode("utf-8"))["prompt_id"]
 
+
 def wait_for_completion(server_address, prompt_id):
     while True:
         try:
@@ -126,7 +145,8 @@ def wait_for_completion(server_address, prompt_id):
             pass
         time.sleep(0.3)
 
-def worker_thread(gpu_id, server_address, job_queue, base_workflow, load_image_node, comfy_dir, s3_client):
+
+def worker_thread(worker_id, gpu_id, server_address, job_queue, base_workflow, load_image_node, comfy_dir, s3_client):
     """Worker task processing images from the shared queue."""
     comfy_input_dir = os.path.join(comfy_dir, "input")
     os.makedirs(comfy_input_dir, exist_ok=True)
@@ -137,9 +157,9 @@ def worker_thread(gpu_id, server_address, job_queue, base_workflow, load_image_n
         except Exception:
             break
 
-        print(f"[GPU {gpu_id}] Processing [{idx}/{total_files}]: {img_name}", flush=True)
+        print(f"[Worker {worker_id} | GPU {gpu_id}] Processing [{idx}/{total_files}]: {img_name}", flush=True)
         local_src_path = os.path.join(LOCAL_INPUT_DIR, img_name)
-        safe_img_name = f"gpu{gpu_id}_" + re.sub(r'[^a-zA-Z0-9_.-]', '_', img_name)
+        safe_img_name = f"w{worker_id}_" + re.sub(r'[^a-zA-Z0-9_.-]', '_', img_name)
         comfy_temp_input = os.path.join(comfy_input_dir, safe_img_name)
 
         try:
@@ -166,19 +186,23 @@ def worker_thread(gpu_id, server_address, job_queue, base_workflow, load_image_n
                     s3_client.upload_file(generated_full_path, S3_BUCKET, s3_target_key)
                     s3_client.delete_object(Bucket=S3_BUCKET, Key=f"input/{img_name}")
 
-                print(f"[GPU {gpu_id}] Successfully upscaled: {img_name}", flush=True)
+                print(f"[Worker {worker_id} | GPU {gpu_id}] Successfully upscaled: {img_name}", flush=True)
 
+                # Cleanup temp local files immediately
                 if os.path.exists(comfy_temp_input):
                     os.remove(comfy_temp_input)
                 if os.path.exists(generated_full_path):
                     os.remove(generated_full_path)
+                if os.path.exists(local_src_path):
+                    os.remove(local_src_path)
             else:
-                print(f"[GPU {gpu_id}] WARNING: Output file missing for {img_name}.", flush=True)
+                print(f"[Worker {worker_id} | GPU {gpu_id}] WARNING: Output file missing for {img_name}.", flush=True)
 
         except Exception as e:
-            print(f"[GPU {gpu_id}] ERROR: Error processing {img_name}: {str(e)}", flush=True)
+            print(f"[Worker {worker_id} | GPU {gpu_id}] ERROR: Error processing {img_name}: {str(e)}", flush=True)
         finally:
             job_queue.task_done()
+
 
 def main():
     os.makedirs(LOCAL_INPUT_DIR, exist_ok=True)
@@ -213,23 +237,28 @@ def main():
         print(f"[ERROR] No valid images found in s3://{S3_BUCKET}/input/. Exiting.", flush=True)
         sys.exit(0)
 
-    # Detect GPUs
-    gpu_count = torch.cuda.device_count()
-    if gpu_count == 0:
-        print("[WARNING] No GPU detected. Defaulting to 1 server instance.", flush=True)
-        gpu_count = 1
+    # Calculate total active workers based on detected GPUs
+    if GPU_COUNT == 0:
+        print("[WARNING] No GPU detected. Defaulting to 1 CPU worker instance.", flush=True)
+        effective_gpus = 1
+        total_workers = 1
+    else:
+        effective_gpus = GPU_COUNT
+        total_workers = GPU_COUNT * WORKERS_PER_GPU
 
-    print(f"Detected {gpu_count} GPU(s). Starting servers...", flush=True)
+    print(f"Detected {GPU_COUNT} GPU(s) (~{VRAM_GB:.1f} GB VRAM per GPU).", flush=True)
+    print(f"Auto-scaling configuration: {total_workers} parallel workers ({WORKERS_PER_GPU} per GPU, tile_size={TILE_SIZE}, tile_batch={TILE_BATCH_SIZE})", flush=True)
 
     server_procs = []
-    gpu_servers = []
+    worker_configs = []
     base_port = 8188
 
-    for gpu_id in range(gpu_count):
-        port = base_port + gpu_id
-        proc, server_addr = start_comfyui_server(gpu_id, port)
+    for worker_id in range(total_workers):
+        gpu_id = worker_id // WORKERS_PER_GPU if GPU_COUNT > 0 else 0
+        port = base_port + worker_id
+        proc, server_addr = start_comfyui_server(worker_id, gpu_id, port)
         server_procs.append(proc)
-        gpu_servers.append((gpu_id, server_addr))
+        worker_configs.append((worker_id, gpu_id, server_addr))
 
     with open(WORKFLOW_FILE, "r") as f:
         base_workflow = json.load(f)
@@ -245,7 +274,9 @@ def main():
     if usdu_node:
         usdu_inputs = base_workflow[usdu_node]["inputs"]
         usdu_inputs["upscale_by"] = upscale_factor
-        usdu_inputs["batch_size"] = 4
+        usdu_inputs["tile_width"] = TILE_SIZE
+        usdu_inputs["tile_height"] = TILE_SIZE
+        usdu_inputs["batch_size"] = TILE_BATCH_SIZE
         usdu_inputs["force_uniform_tiles"] = True
         usdu_inputs.setdefault("seam_fix_mode", "None")
         usdu_inputs.setdefault("seam_fix_width", 64)
@@ -261,12 +292,12 @@ def main():
     for idx, img_name in enumerate(image_files, 1):
         job_queue.put((idx, img_name, len(image_files)))
 
-    # Launch thread pool matching GPU count
-    with ThreadPoolExecutor(max_workers=gpu_count) as executor:
+    # Launch worker pool matching total calculated workers
+    with ThreadPoolExecutor(max_workers=total_workers) as executor:
         futures = []
-        for gpu_id, server_addr in gpu_servers:
+        for worker_id, gpu_id, server_addr in worker_configs:
             f = executor.submit(
-                worker_thread, gpu_id, server_addr, job_queue, 
+                worker_thread, worker_id, gpu_id, server_addr, job_queue, 
                 base_workflow, load_image_node, comfy_dir, s3_client
             )
             futures.append(f)
@@ -278,6 +309,7 @@ def main():
         proc.terminate()
 
     print("\n=== All batch jobs completed successfully ===", flush=True)
+
 
 if __name__ == "__main__":
     main()

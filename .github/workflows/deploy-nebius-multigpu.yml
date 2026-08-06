@@ -9,11 +9,43 @@ on:
       - 'docs/**'
       - '.gitignore'
       - '.github/workflows/*'
-  workflow_dispatch: # Enables manual triggering from UI & GitHub CLI
+  workflow_dispatch:
+    inputs:
+      upscale_factor:
+        description: 'Upscale factor'
+        required: false
+        default: '4.0'
+        type: string
+      gpu_platform:
+        description: 'Nebius GPU Platform'
+        required: false
+        default: 'gpu-l40s-d'
+        type: string
+      gpu_preset:
+        description: 'Nebius GPU Preset'
+        required: false
+        default: '2gpu-64vcpu-384gb'
+        type: string
+      disk_size:
+        description: 'Disk size'
+        required: false
+        default: '250Gi'
+        type: string
+      timeout:
+        description: 'Job execution timeout'
+        required: false
+        default: '4h'
+        type: string
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  # Fallbacks ensure git push events still use defaults when inputs are empty
+  UPSCALE_FACTOR: ${{ inputs.upscale_factor || '4.0' }}
+  GPU_PLATFORM: ${{ inputs.gpu_platform || 'gpu-l40s-d' }}
+  GPU_PRESET: ${{ inputs.gpu_preset || '2gpu-64vcpu-384gb' }}
+  DISK_SIZE: ${{ inputs.disk_size || '250Gi' }}
+  JOB_TIMEOUT: ${{ inputs.timeout || '4h' }}
 
 jobs:
   deploy-only:
@@ -36,22 +68,20 @@ jobs:
 
       - name: Deploy Batch Job to Nebius AI Cloud
         run: |
-          JOB_NAME="sdxl-upscale-$(date +%s)"
-          
           nebius ai job create \
-            --name "sdxl-upscale-dual-gpu-$(date +%s)" \
+            --name "sdxl-upscale-job-$(date +%s)" \
             --parent-id "${{ secrets.NEBIUS_PROJECT_ID }}" \
             --image "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" \
             --container-command "/app/entrypoint.sh" \
             --env MODE=batch \
-            --env UPSCALE_FACTOR=4.0 \
+            --env UPSCALE_FACTOR="${{ env.UPSCALE_FACTOR }}" \
             --env S3_BUCKET_NAME="${{ secrets.S3_BUCKET_NAME }}" \
             --env S3_ACCESS_KEY="${{ secrets.S3_ACCESS_KEY }}" \
             --env S3_SECRET_KEY="${{ secrets.S3_SECRET_KEY }}" \
             --env S3_ENDPOINT_URL="https://storage.eu-north1.nebius.cloud" \
-            --platform gpu-l40s-d \
-            --preset 2gpu-64vcpu-384gb \
-            --disk-size 250Gi \
+            --platform "${{ env.GPU_PLATFORM }}" \
+            --preset "${{ env.GPU_PRESET }}" \
+            --disk-size "${{ env.DISK_SIZE }}" \
             --subnet-id "${{ secrets.NEBIUS_SUBNET_ID }}" \
             --preemptible \
-            --timeout 4h
+            --timeout "${{ env.JOB_TIMEOUT }}"
